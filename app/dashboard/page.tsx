@@ -1,8 +1,10 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { signOut } from "@/lib/actions/auth";
+import { redirect } from 'next/navigation';
+import { createClient } from '@/lib/supabase/server';
+import { isStaffUser } from '@/lib/auth/roles';
+import { CustomerDashboardView } from '@/components/tickets/CustomerDashboardView';
+import type { Ticket } from '@/lib/types/ticket';
 
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -13,22 +15,24 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
 
   if (error || !user) {
-    redirect("/login");
+    redirect('/login');
   }
 
+  if (isStaffUser(user)) {
+    redirect('/manage');
+  }
+
+  // Fetch tickets belonging to this user
+  const { data: tickets } = await supabase
+    .from('tickets')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false });
+
   return (
-    <main className="min-h-screen bg-[#2b2738] text-white flex flex-col p-6">
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-white/50">{user.email}</span>
-        <form action={signOut}>
-          <button
-            type="submit"
-            className="text-xs text-[#9e8cfc] hover:text-[#b4a5fc] underline cursor-pointer"
-          >
-            Sign out
-          </button>
-        </form>
-      </div>
-    </main>
+    <CustomerDashboardView
+      userEmail={user.email || 'customer@smartdesk.app'}
+      initialTickets={(tickets || []) as Ticket[]}
+    />
   );
 }
