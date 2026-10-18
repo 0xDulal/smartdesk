@@ -1,17 +1,22 @@
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { isStaffUser } from "@/lib/auth/roles";
 
-// Force dynamic rendering - this page checks auth and redirects
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const supabase = await createClient()
-
-  const { data: { user } } = await supabase.auth.getUser()
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   if (user) {
-    redirect('/dashboard')
+    if (isStaffUser(user)) {
+      redirect("/manage");
+    } else {
+      redirect("/dashboard");
+    }
   } else {
-    redirect('/login')
+    redirect("/login");
   }
 }

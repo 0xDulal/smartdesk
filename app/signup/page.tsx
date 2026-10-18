@@ -3,9 +3,9 @@
 import { useState, FormEvent } from "react";
 import Link from "next/link";
 import { Eye, EyeOff, Check, AlertCircle, MailCheck } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import AuthHero from "@/components/auth/AuthHero";
 import SocialButtons from "@/components/auth/SocialButtons";
+import { useAuth } from "@/context/AuthContext";
 
 export default function SignupPage() {
   const [firstName, setFirstName] = useState("");
@@ -25,7 +25,7 @@ export default function SignupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isEmailConfirmationSent, setIsEmailConfirmationSent] = useState(false);
 
-  const supabase = createClient();
+  const { signUpWithEmail } = useAuth();
 
   function validate() {
     const newErrors: typeof errors = {};
@@ -61,32 +61,27 @@ export default function SignupPage() {
     setIsLoading(true);
     setErrors({});
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          first_name: firstName.trim(),
-          last_name: lastName.trim(),
-        },
-        emailRedirectTo: `${window.location.origin}/dashboard`,
-      },
+    const { error, confirmationSent } = await signUpWithEmail(email, password, {
+      firstName,
+      lastName,
     });
 
     if (error) {
-      setErrors({ form: error.message });
+      setErrors({ form: error });
       setIsLoading(false);
       return;
     }
 
-    setIsEmailConfirmationSent(true);
+    if (confirmationSent) {
+      setIsEmailConfirmationSent(true);
+    }
     setIsLoading(false);
   }
 
   return (
-    <main className="min-h-screen w-full bg-[#2b2738] flex flex-col justify-center lg:flex-row p-3 sm:p-4 lg:p-5">
+    <main className="min-h-screen w-full bg-[#2b2738] flex flex-col lg:flex-row p-3 sm:p-4 lg:p-5">
       {/* Left Hero Visual Card */}
-      <div className="hidden min-h-[480px] lg:w-1/2 lg:min-h-[calc(100vh-2.5rem)] lg:flex">
+      <div className="w-full lg:w-1/2 min-h-[480px] lg:min-h-[calc(100vh-2.5rem)] flex">
         <AuthHero />
       </div>
 
@@ -162,7 +157,7 @@ export default function SignupPage() {
                     type="text"
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="First Name"
+                    placeholder="Fletcher"
                     className="w-full px-3.5 py-2.5 rounded-md bg-[#353046] border border-white/5 text-white placeholder-[#7e7895] text-sm focus:outline-none focus:border-[#7c5cfc] focus:ring-1 focus:ring-[#7c5cfc] transition"
                   />
                   {errors.firstName && (

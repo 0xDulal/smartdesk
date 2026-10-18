@@ -2,11 +2,11 @@
 
 import { useState, FormEvent, Suspense } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Eye, EyeOff, Check, AlertCircle } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import AuthHero from "@/components/auth/AuthHero";
 import SocialButtons from "@/components/auth/SocialButtons";
+import { useAuth } from "@/context/AuthContext";
 
 function LoginForm() {
   const [email, setEmail] = useState("");
@@ -21,10 +21,9 @@ function LoginForm() {
   }>({});
   const [isLoading, setIsLoading] = useState(false);
 
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectFrom = searchParams.get("redirectFrom") || "/dashboard";
-  const supabase = createClient();
+  const redirectFrom = searchParams.get("redirectFrom");
+  const { signInWithEmail } = useAuth();
 
   function validate() {
     const newErrors: typeof errors = {};
@@ -50,19 +49,12 @@ function LoginForm() {
     setIsLoading(true);
     setErrors({});
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { error } = await signInWithEmail(email, password, redirectFrom);
 
     if (error) {
-      setErrors({ form: error.message });
+      setErrors({ form: error });
       setIsLoading(false);
-      return;
     }
-
-    router.push(redirectFrom);
-    router.refresh();
   }
 
   return (
@@ -197,12 +189,12 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen w-full bg-[#2b2738] flex flex-col lg:flex-row p-3 sm:p-4 lg:p-5">
       {/* Left Hero Visual Card */}
-      <div className="hidden lg:w-1/2 min-h-[480px] lg:min-h-[calc(100vh-2.5rem)] lg:flex">
+      <div className="w-full lg:w-1/2 min-h-[480px] lg:min-h-[calc(100vh-2.5rem)] flex">
         <AuthHero />
       </div>
 
       {/* Right Form Area */}
-      <div className="w-full lg:w-1/2 grow lg:grow-0 flex flex-col justify-center items-center px-4 sm:px-8 lg:px-14 py-8 lg:py-12">
+      <div className="w-full lg:w-1/2 flex flex-col justify-center items-center px-4 sm:px-8 lg:px-14 py-8 lg:py-12">
         <Suspense
           fallback={
             <div className="w-full max-w-[420px] py-12 flex justify-center">

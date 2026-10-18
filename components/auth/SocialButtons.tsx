@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@/context/AuthContext";
 
 interface SocialButtonsProps {
   mode?: "signup" | "login";
@@ -13,24 +13,13 @@ export default function SocialButtons({
   onError,
 }: SocialButtonsProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const supabase = createClient();
+  const { signInWithGoogle } = useAuth();
 
   async function handleGoogleSignIn() {
-    try {
-      setIsLoading(true);
-      const redirectTo = `${window.location.origin}/dashboard`;
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo,
-        },
-      });
-      if (error) {
-        onError?.(error.message);
-        setIsLoading(false);
-      }
-    } catch {
-      onError?.("Failed to sign in with Google");
+    setIsLoading(true);
+    const { error } = await signInWithGoogle();
+    if (error) {
+      onError?.(error);
       setIsLoading(false);
     }
   }
