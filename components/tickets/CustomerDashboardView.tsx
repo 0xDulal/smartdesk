@@ -10,13 +10,12 @@ import {
   AlertCircle,
   Inbox,
   LogOut,
-  Sparkles,
 } from 'lucide-react';
 import { StatusBadge, PriorityBadge, SlaBadge } from './TicketBadge';
 import { CreateTicketModal } from './CreateTicketModal';
 import { TicketConversationModal } from './TicketConversationModal';
 import { signOut } from '@/lib/actions/auth';
-import type { Ticket, TicketStatus } from '@/lib/types/ticket';
+import type { Ticket } from '@/lib/types/ticket';
 import { useRouter } from 'next/navigation';
 
 interface CustomerDashboardViewProps {
@@ -29,7 +28,7 @@ export function CustomerDashboardView({
   initialTickets,
 }: CustomerDashboardViewProps) {
   const router = useRouter();
-  const [tickets, setTickets] = useState<Ticket[]>(initialTickets);
+  const tickets = initialTickets;
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);

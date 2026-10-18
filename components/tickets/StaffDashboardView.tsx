@@ -10,14 +10,13 @@ import {
   CheckCircle2,
   Inbox,
   LogOut,
-  Filter,
 } from 'lucide-react';
 import { StatusBadge, PriorityBadge, SlaBadge } from './TicketBadge';
 import { TicketConversationModal } from './TicketConversationModal';
 import { updateTicketStatusAction } from '@/lib/actions/tickets';
 import { isSlaBreached } from '@/lib/workflow/sla';
 import { signOut } from '@/lib/actions/auth';
-import type { Ticket, TicketPriority, TicketStatus } from '@/lib/types/ticket';
+import type { Ticket, TicketStatus } from '@/lib/types/ticket';
 import { useRouter } from 'next/navigation';
 
 interface StaffDashboardViewProps {

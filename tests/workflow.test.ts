@@ -1,7 +1,7 @@
-import test, { describe, it } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { calculateSlaDueDate, isSlaBreached, SLA_HOURS_BY_PRIORITY } from '../lib/workflow/sla.ts';
-import { canTransitionStatus, STATUS_TRANSITIONS } from '../lib/workflow/status.ts';
+import { canTransitionStatus } from '../lib/workflow/status.ts';
 
 describe('SmartDesk SLA Workflow Calculations', () => {
   it('correctly allocates SLA hours according to priority tier', () => {

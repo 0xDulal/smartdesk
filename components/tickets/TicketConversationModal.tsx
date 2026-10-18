@@ -8,9 +8,6 @@ import {
   AlertCircle,
   Loader2,
   Clock,
-  User,
-  ShieldAlert,
-  ArrowRight,
 } from 'lucide-react';
 import { StatusBadge, PriorityBadge, SlaBadge } from './TicketBadge';
 import {
