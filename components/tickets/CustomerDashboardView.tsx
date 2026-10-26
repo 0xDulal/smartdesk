@@ -30,18 +30,22 @@ export function CustomerDashboardView({
   const router = useRouter();
   const tickets = initialTickets;
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterPriority, setFilterPriority] = useState<string>('all');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
 
-  // Filter logic
+  // Filter logic (FR-08: search and multiple filters work together)
   const filteredTickets = tickets.filter((t) => {
     const matchesStatus = filterStatus === 'all' || t.status === filterStatus;
+    const matchesPriority = filterPriority === 'all' || t.priority === filterPriority;
+    const matchesCategory = filterCategory === 'all' || t.category === filterCategory;
     const matchesSearch =
       t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
       t.category.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesStatus && matchesSearch;
+    return matchesStatus && matchesPriority && matchesCategory && matchesSearch;
   });
 
   const stats = {
@@ -137,35 +141,84 @@ export function CustomerDashboardView({
           </div>
         </div>
 
-        {/* Filters and Search Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
-          {/* Status Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-            {['all', 'open', 'in_progress', 'resolved', 'closed'].map((status) => (
-              <button
-                key={status}
-                onClick={() => setFilterStatus(status)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition cursor-pointer shrink-0 ${
-                  filterStatus === status
-                    ? 'bg-[#6c5dd3] text-white shadow-xs'
-                    : 'bg-[#2f2942] text-white/60 hover:text-white hover:bg-[#37304f]'
-                }`}
-              >
-                {status.replace('_', ' ')}
-              </button>
-            ))}
+        {/* Filters and Search Bar (FR-08: Status, Priority, Category & Search) */}
+        <div className="space-y-2.5 pt-2">
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+            {/* Status Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+              {['all', 'open', 'in_progress', 'resolved', 'closed'].map((status) => (
+                <button
+                  key={status}
+                  onClick={() => setFilterStatus(status)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition cursor-pointer shrink-0 ${
+                    filterStatus === status
+                      ? 'bg-[#6c5dd3] text-white shadow-xs'
+                      : 'bg-[#2f2942] text-white/60 hover:text-white hover:bg-[#37304f]'
+                  }`}
+                >
+                  {status.replace('_', ' ')}
+                </button>
+              ))}
+            </div>
+
+            {/* Search Input */}
+            <div className="relative w-full md:w-72">
+              <Search className="w-4 h-4 text-white/40 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search by title, description..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3.5 py-1.5 rounded-lg bg-[#2f2942] border border-white/5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#7c5cfc] transition"
+              />
+            </div>
           </div>
 
-          {/* Search Input */}
-          <div className="relative w-full sm:w-72">
-            <Search className="w-4 h-4 text-white/40 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search your tickets..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3.5 py-1.5 rounded-lg bg-[#2f2942] border border-white/5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#7c5cfc] transition"
-            />
+          {/* Sub-Filters: Priority & Category */}
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-white/40 text-[11px]">Filters:</span>
+
+            <select
+              value={filterPriority}
+              onChange={(e) => setFilterPriority(e.target.value)}
+              className="px-2.5 py-1 rounded-md bg-[#2f2942] border border-white/5 text-white/80 text-xs focus:outline-none focus:border-[#7c5cfc]"
+              aria-label="Filter by priority"
+            >
+              <option value="all">All Priorities</option>
+              <option value="urgent">Urgent</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="px-2.5 py-1 rounded-md bg-[#2f2942] border border-white/5 text-white/80 text-xs focus:outline-none focus:border-[#7c5cfc]"
+              aria-label="Filter by category"
+            >
+              <option value="all">All Categories</option>
+              <option value="technical">Technical</option>
+              <option value="billing">Billing</option>
+              <option value="account">Account</option>
+              <option value="feature">Feature</option>
+              <option value="general">General</option>
+            </select>
+
+            {(filterStatus !== 'all' || filterPriority !== 'all' || filterCategory !== 'all' || searchQuery) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterStatus('all');
+                  setFilterPriority('all');
+                  setFilterCategory('all');
+                  setSearchQuery('');
+                }}
+                className="text-[11px] text-[#a78bfa] hover:text-[#c4b5fd] underline ml-auto"
+              >
+                Clear all filters
+              </button>
+            )}
           </div>
         </div>
 

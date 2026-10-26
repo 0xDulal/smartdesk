@@ -5,12 +5,15 @@ import { createClient } from '@/lib/supabase/server';
 import { isStaffUser } from '@/lib/auth/roles';
 import {
   createTicketSchema,
+  updateTicketSchema,
+  deleteTicketSchema,
+  suggestAiClassificationSchema,
   updateTicketStatusSchema,
   addTicketMessageSchema,
 } from '@/lib/validations/ticket';
 import { calculateSlaDueDate } from '@/lib/workflow/sla';
 import { canTransitionStatus } from '@/lib/workflow/status';
-import { triageTicket } from '@/lib/ai/triage';
+import { triageTicket, type AiTriageResult } from '@/lib/ai/triage';
 import type { Ticket, TicketMessage, TicketStatus } from '@/lib/types/ticket';
 
 export interface ActionResponse<T = unknown> {
@@ -279,4 +282,166 @@ export async function getTicketDetailsAction(ticketId: string): Promise<ActionRe
       messages: (messages || []) as TicketMessage[],
     },
   };
+}
+
+/**
+ * Provides interactive category and priority suggestions for user review before submission.
+ */
+export async function suggestTicketClassificationAction(
+  title: string,
+  description: string
+): Promise<ActionResponse<AiTriageResult>> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { success: false, error: 'Unauthorized. Please sign in.' };
+  }
+
+  const parsed = suggestAiClassificationSchema.safeParse({ title, description });
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: parsed.error.issues[0]?.message || 'Please provide a valid title and description.',
+    };
+  }
+
+  try {
+    const triage = await triageTicket(parsed.data.title, parsed.data.description);
+    return { success: true, data: triage };
+  } catch {
+    return { success: false, error: 'AI service temporarily unavailable. You can set fields manually.' };
+  }
+}
+
+/**
+ * Updates an existing ticket's core details (title, description, category, priority).
+ */
+export async function updateTicketAction(formData: FormData): Promise<ActionResponse<Ticket>> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { success: false, error: 'Unauthorized.' };
+  }
+
+  const rawData = {
+    ticketId: formData.get('ticketId'),
+    title: formData.get('title'),
+    description: formData.get('description'),
+    category: formData.get('category'),
+    priority: formData.get('priority'),
+  };
+
+  const parsed = updateTicketSchema.safeParse(rawData);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: parsed.error.issues[0]?.message || 'Invalid ticket details.',
+    };
+  }
+
+  const { ticketId, title, description, category, priority } = parsed.data;
+
+  // Verify ownership or staff role
+  const { data: currentTicket, error: fetchError } = await supabase
+    .from('tickets')
+    .select('*')
+    .eq('id', ticketId)
+    .single();
+
+  if (fetchError || !currentTicket) {
+    return { success: false, error: 'Ticket not found.' };
+  }
+
+  const isStaff = isStaffUser(user);
+  if (!isStaff && currentTicket.user_id !== user.id) {
+    return { success: false, error: 'You do not have permission to edit this ticket.' };
+  }
+
+  // Recalculate SLA due date if priority changed
+  const slaDueAt =
+    priority !== currentTicket.priority
+      ? calculateSlaDueDate(priority).toISOString()
+      : currentTicket.sla_due_at;
+
+  const { data: updated, error: updateError } = await supabase
+    .from('tickets')
+    .update({
+      title,
+      description,
+      category,
+      priority,
+      sla_due_at: slaDueAt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', ticketId)
+    .select()
+    .single();
+
+  if (updateError) {
+    return { success: false, error: updateError.message };
+  }
+
+  revalidatePath('/dashboard');
+  revalidatePath('/manage');
+  revalidatePath('/menage');
+
+  return { success: true, data: updated as Ticket };
+}
+
+/**
+ * Deletes a ticket with ownership verification.
+ */
+export async function deleteTicketAction(ticketId: string): Promise<ActionResponse<{ id: string }>> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { success: false, error: 'Unauthorized.' };
+  }
+
+  const parsed = deleteTicketSchema.safeParse({ ticketId });
+  if (!parsed.success) {
+    return { success: false, error: 'Invalid ticket ID.' };
+  }
+
+  const { data: currentTicket, error: fetchError } = await supabase
+    .from('tickets')
+    .select('id, user_id')
+    .eq('id', parsed.data.ticketId)
+    .single();
+
+  if (fetchError || !currentTicket) {
+    return { success: false, error: 'Ticket not found.' };
+  }
+
+  const isStaff = isStaffUser(user);
+  if (!isStaff && currentTicket.user_id !== user.id) {
+    return { success: false, error: 'You do not have permission to delete this ticket.' };
+  }
+
+  const { error: deleteError } = await supabase
+    .from('tickets')
+    .delete()
+    .eq('id', parsed.data.ticketId);
+
+  if (deleteError) {
+    return { success: false, error: deleteError.message };
+  }
+
+  revalidatePath('/dashboard');
+  revalidatePath('/manage');
+  revalidatePath('/menage');
+
+  return { success: true, data: { id: parsed.data.ticketId } };
 }
