@@ -8,14 +8,19 @@ import {
   AlertCircle,
   Loader2,
   Clock,
+  Edit2,
+  Trash2,
+  Check,
 } from 'lucide-react';
 import { StatusBadge, PriorityBadge, SlaBadge } from './TicketBadge';
 import {
   getTicketDetailsAction,
   addTicketMessageAction,
   updateTicketStatusAction,
+  updateTicketAction,
+  deleteTicketAction,
 } from '@/lib/actions/tickets';
-import type { Ticket, TicketMessage, TicketStatus } from '@/lib/types/ticket';
+import type { Ticket, TicketMessage, TicketStatus, TicketCategory, TicketPriority } from '@/lib/types/ticket';
 
 interface TicketConversationModalProps {
   ticketId: string;
@@ -40,6 +45,18 @@ export function TicketConversationModal({
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Edit mode state (FR-06)
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editCategory, setEditCategory] = useState<TicketCategory>('general');
+  const [editPriority, setEditPriority] = useState<TicketPriority>('medium');
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // Delete confirmation state (FR-07)
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -50,6 +67,10 @@ export function TicketConversationModal({
       if (res.success && res.data) {
         setTicket(res.data.ticket);
         setMessages(res.data.messages);
+        setEditTitle(res.data.ticket.title);
+        setEditDescription(res.data.ticket.description);
+        setEditCategory(res.data.ticket.category);
+        setEditPriority(res.data.ticket.priority);
       } else {
         setError(res.error || 'Failed to load ticket details');
       }
@@ -57,6 +78,47 @@ export function TicketConversationModal({
     }
     loadData();
   }, [ticketId]);
+
+  async function handleSaveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!ticket) return;
+
+    setSavingEdit(true);
+    setError(null);
+
+    const formData = new FormData();
+    formData.set('ticketId', ticket.id);
+    formData.set('title', editTitle);
+    formData.set('description', editDescription);
+    formData.set('category', editCategory);
+    formData.set('priority', editPriority);
+
+    const res = await updateTicketAction(formData);
+    if (res.success && res.data) {
+      setTicket(res.data);
+      setIsEditing(false);
+      if (onTicketUpdated) onTicketUpdated();
+    } else {
+      setError(res.error || 'Failed to update ticket');
+    }
+    setSavingEdit(false);
+  }
+
+  async function handleDeleteTicket() {
+    if (!ticket) return;
+
+    setDeleting(true);
+    setError(null);
+
+    const res = await deleteTicketAction(ticket.id);
+    if (res.success) {
+      if (onTicketUpdated) onTicketUpdated();
+      onClose();
+    } else {
+      setError(res.error || 'Failed to delete ticket');
+      setDeleting(false);
+    }
+  }
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -110,7 +172,7 @@ export function TicketConversationModal({
       <div className="relative w-full max-w-2xl h-[85vh] max-h-[750px] rounded-xl bg-[#231f30] border border-white/10 shadow-2xl flex flex-col text-white overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Top Header */}
         <div className="p-4 border-b border-white/10 flex items-start justify-between bg-[#2a253a]/50">
-          <div className="space-y-1.5 max-w-[80%]">
+          <div className="space-y-1.5 max-w-[75%]">
             <div className="flex items-center gap-2 flex-wrap">
               {ticket && (
                 <>
@@ -128,14 +190,146 @@ export function TicketConversationModal({
             </h2>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1 rounded-md text-white/50 hover:text-white hover:bg-white/5 transition"
-            aria-label="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            {ticket && (ticket.user_email === currentUserEmail || isStaff) && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(!isEditing)}
+                  className="p-1.5 rounded-md text-white/60 hover:text-white hover:bg-white/10 transition"
+                  title="Edit ticket"
+                  aria-label="Edit ticket"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmingDelete(true)}
+                  className="p-1.5 rounded-md text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition"
+                  title="Delete ticket"
+                  aria-label="Delete ticket"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1 rounded-md text-white/50 hover:text-white hover:bg-white/5 transition"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
+
+        {/* Delete Confirmation Modal Overlay */}
+        {isConfirmingDelete && (
+          <div className="p-4 m-3 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-200 text-xs space-y-2.5">
+            <p className="font-semibold text-rose-300">Are you sure you want to delete this ticket?</p>
+            <p className="text-white/70 text-[11px]">
+              This action permanently removes the ticket, all customer/staff replies, and associated SLA tracking.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsConfirmingDelete(false)}
+                disabled={deleting}
+                className="px-3 py-1.5 rounded bg-white/10 hover:bg-white/20 text-white text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteTicket}
+                disabled={deleting}
+                className="px-3 py-1.5 rounded bg-rose-600 hover:bg-rose-500 text-white text-xs font-medium flex items-center gap-1.5"
+              >
+                {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                <span>Confirm Delete</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Form Drawer */}
+        {isEditing && ticket && (
+          <form onSubmit={handleSaveEdit} className="p-4 bg-[#2b253b] border-b border-white/10 space-y-3">
+            <div className="flex items-center justify-between pb-1">
+              <span className="text-xs font-semibold text-[#c4b5fd]">Edit Ticket Details</span>
+              <button
+                type="button"
+                onClick={() => setIsEditing(false)}
+                className="text-[11px] text-white/50 hover:text-white"
+              >
+                Cancel
+              </button>
+            </div>
+            <div>
+              <label className="block text-[11px] text-white/60 mb-1">Title</label>
+              <input
+                type="text"
+                required
+                minLength={3}
+                maxLength={150}
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                className="w-full px-3 py-1.5 text-xs rounded bg-[#353046] border border-white/10 text-white focus:outline-none focus:border-[#7c5cfc]"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] text-white/60 mb-1">Description</label>
+              <textarea
+                required
+                rows={3}
+                minLength={10}
+                maxLength={10000}
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                className="w-full px-3 py-1.5 text-xs rounded bg-[#353046] border border-white/10 text-white focus:outline-none focus:border-[#7c5cfc] resize-none"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-white/60 mb-1">Category</label>
+                <select
+                  value={editCategory}
+                  onChange={(e) => setEditCategory(e.target.value as TicketCategory)}
+                  className="w-full px-2.5 py-1.5 text-xs rounded bg-[#353046] border border-white/10 text-white focus:outline-none focus:border-[#7c5cfc]"
+                >
+                  <option value="technical">Technical Issue</option>
+                  <option value="billing">Billing & Payments</option>
+                  <option value="account">Account & Auth</option>
+                  <option value="feature">Feature Request</option>
+                  <option value="general">General Support</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] text-white/60 mb-1">Priority</label>
+                <select
+                  value={editPriority}
+                  onChange={(e) => setEditPriority(e.target.value as TicketPriority)}
+                  className="w-full px-2.5 py-1.5 text-xs rounded bg-[#353046] border border-white/10 text-white focus:outline-none focus:border-[#7c5cfc]"
+                >
+                  <option value="low">Low (48h SLA)</option>
+                  <option value="medium">Medium (24h SLA)</option>
+                  <option value="high">High (12h SLA)</option>
+                  <option value="urgent">Urgent (4h SLA)</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="submit"
+                disabled={savingEdit}
+                className="px-3.5 py-1.5 rounded bg-[#6c5dd3] hover:bg-[#5e4fc7] text-white text-xs font-medium flex items-center gap-1.5"
+              >
+                {savingEdit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                <span>Save Changes</span>
+              </button>
+            </div>
+          </form>
+        )}
 
         {error && (
           <div className="m-3 p-2.5 rounded-md bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">

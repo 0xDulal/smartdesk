@@ -91,13 +91,20 @@ CREATE POLICY "Users can insert their own tickets"
   FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
--- Staff can update any ticket; customers can only close their own open tickets
+-- Staff can update any ticket; customers can update their own tickets
 DROP POLICY IF EXISTS "Users can update authorized tickets" ON public.tickets;
 CREATE POLICY "Users can update authorized tickets"
   ON public.tickets
   FOR UPDATE
   USING (auth.uid() = user_id OR public.is_staff())
   WITH CHECK (auth.uid() = user_id OR public.is_staff());
+
+-- Users can delete their own tickets; staff can delete any ticket
+DROP POLICY IF EXISTS "Users can delete authorized tickets" ON public.tickets;
+CREATE POLICY "Users can delete authorized tickets"
+  ON public.tickets
+  FOR DELETE
+  USING (auth.uid() = user_id OR public.is_staff());
 
 -- 6. Ticket Messages Policies
 -- Users can view messages for tickets they have access to

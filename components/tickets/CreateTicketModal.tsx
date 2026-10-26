@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Sparkles, AlertCircle, Loader2 } from 'lucide-react';
-import { createTicketAction } from '@/lib/actions/tickets';
+import { X, Sparkles, AlertCircle, Loader2, Check } from 'lucide-react';
+import { createTicketAction, suggestTicketClassificationAction } from '@/lib/actions/tickets';
 import type { TicketCategory, TicketPriority } from '@/lib/types/ticket';
 
 interface CreateTicketModalProps {
@@ -16,12 +16,42 @@ export function CreateTicketModal({ isOpen, onClose, onTicketCreated }: CreateTi
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<TicketCategory>('general');
   const [priority, setPriority] = useState<TicketPriority>('medium');
-  const [autoTriage, setAutoTriage] = useState(true);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+  const [suggestionApplied, setSuggestionApplied] = useState(false);
+  const [aiNote, setAiNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  async function handleSuggestWithAi() {
+    if (title.trim().length < 3 || description.trim().length < 10) {
+      setError('Please provide at least a short title and 10+ character description for AI suggestions.');
+      return;
+    }
+
+    setError(null);
+    setIsSuggesting(true);
+    setSuggestionApplied(false);
+    setAiNote(null);
+
+    try {
+      const res = await suggestTicketClassificationAction(title.trim(), description.trim());
+      if (res.success && res.data) {
+        setCategory(res.data.category);
+        setPriority(res.data.priority);
+        setAiNote(`AI suggested "${res.data.category}" category with "${res.data.priority}" priority (${Math.round((res.data.confidence || 0.85) * 100)}% confidence).`);
+        setSuggestionApplied(true);
+      } else {
+        setError(res.error || 'AI suggestion failed. You can choose category and priority manually.');
+      }
+    } catch {
+      setError('AI suggestion service error. Please select manually.');
+    } finally {
+      setIsSuggesting(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -32,9 +62,8 @@ export function CreateTicketModal({ isOpen, onClose, onTicketCreated }: CreateTi
       const formData = new FormData();
       formData.set('title', title);
       formData.set('description', description);
-      // If autoTriage is active, we let the backend AI triage categorize and prioritize
-      formData.set('category', autoTriage ? 'general' : category);
-      formData.set('priority', autoTriage ? 'medium' : priority);
+      formData.set('category', category);
+      formData.set('priority', priority);
 
       const res = await createTicketAction(formData);
 
@@ -46,6 +75,10 @@ export function CreateTicketModal({ isOpen, onClose, onTicketCreated }: CreateTi
 
       setTitle('');
       setDescription('');
+      setCategory('general');
+      setPriority('medium');
+      setAiNote(null);
+      setSuggestionApplied(false);
       setIsLoading(false);
       onClose();
       if (onTicketCreated) {
@@ -92,8 +125,8 @@ export function CreateTicketModal({ isOpen, onClose, onTicketCreated }: CreateTi
             <input
               type="text"
               required
-              minLength={5}
-              maxLength={120}
+              minLength={3}
+              maxLength={150}
               placeholder="e.g. Cannot access payment history"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -109,7 +142,7 @@ export function CreateTicketModal({ isOpen, onClose, onTicketCreated }: CreateTi
               required
               rows={4}
               minLength={10}
-              maxLength={2000}
+              maxLength={10000}
               placeholder="Provide relevant details, steps to reproduce, or any error messages..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -117,59 +150,78 @@ export function CreateTicketModal({ isOpen, onClose, onTicketCreated }: CreateTi
             />
           </div>
 
-          {/* AI Auto-triage toggle */}
-          <div className="p-3 rounded-lg bg-[#2e293f] border border-white/5 flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <Sparkles className="w-4 h-4 text-[#9e8cfc]" />
-              <div>
-                <p className="text-xs font-medium text-white">SmartDesk AI Auto-Classification</p>
-                <p className="text-[11px] text-white/50">
-                  Automatically predicts category and SLA urgency based on your description
-                </p>
+          {/* AI Suggestion Bar (FR-09 & US-08) */}
+          <div className="p-3.5 rounded-lg bg-[#2e293f] border border-white/10 space-y-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#9e8cfc]" />
+                <span className="text-xs font-medium text-white">AI Assistant</span>
+                {suggestionApplied && (
+                  <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-medium">
+                    <Check className="w-3 h-3" />
+                    Applied
+                  </span>
+                )}
               </div>
+              <button
+                type="button"
+                onClick={handleSuggestWithAi}
+                disabled={isSuggesting || !title.trim() || !description.trim()}
+                className="px-3 py-1.5 rounded-md bg-[#6c5dd3]/80 hover:bg-[#6c5dd3] text-white text-xs font-medium transition flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
+              >
+                {isSuggesting ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Analyzing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3 h-3" />
+                    <span>Suggest with AI</span>
+                  </>
+                )}
+              </button>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={autoTriage}
-                onChange={(e) => setAutoTriage(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-9 h-5 bg-[#3e3852] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#6c5dd3]"></div>
-            </label>
+            {aiNote ? (
+              <p className="text-[11px] text-[#c4b5fd] bg-[#7c5cfc]/10 border border-[#7c5cfc]/20 p-2 rounded">
+                {aiNote}
+              </p>
+            ) : (
+              <p className="text-[11px] text-white/50">
+                Click &quot;Suggest with AI&quot; to predict category and priority before saving. You can edit suggestions below.
+              </p>
+            )}
           </div>
 
-          {!autoTriage && (
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div>
-                <label className="block text-xs font-medium text-white/70 mb-1.5">Category</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as TicketCategory)}
-                  className="w-full px-3 py-2 rounded-md bg-[#353046] border border-white/10 text-white text-xs focus:outline-none focus:border-[#7c5cfc]"
-                >
-                  <option value="technical">Technical Issue</option>
-                  <option value="billing">Billing & Payments</option>
-                  <option value="account">Account & Auth</option>
-                  <option value="feature">Feature Request</option>
-                  <option value="general">General Support</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-white/70 mb-1.5">Priority</label>
-                <select
-                  value={priority}
-                  onChange={(e) => setPriority(e.target.value as TicketPriority)}
-                  className="w-full px-3 py-2 rounded-md bg-[#353046] border border-white/10 text-white text-xs focus:outline-none focus:border-[#7c5cfc]"
-                >
-                  <option value="low">Low (48h SLA)</option>
-                  <option value="medium">Medium (24h SLA)</option>
-                  <option value="high">High (12h SLA)</option>
-                  <option value="urgent">Urgent (4h SLA)</option>
-                </select>
-              </div>
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            <div>
+              <label className="block text-xs font-medium text-white/70 mb-1.5">Category</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value as TicketCategory)}
+                className="w-full px-3 py-2 rounded-md bg-[#353046] border border-white/10 text-white text-xs focus:outline-none focus:border-[#7c5cfc]"
+              >
+                <option value="technical">Technical Issue</option>
+                <option value="billing">Billing & Payments</option>
+                <option value="account">Account & Auth</option>
+                <option value="feature">Feature Request</option>
+                <option value="general">General Support</option>
+              </select>
             </div>
-          )}
+            <div>
+              <label className="block text-xs font-medium text-white/70 mb-1.5">Priority</label>
+              <select
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as TicketPriority)}
+                className="w-full px-3 py-2 rounded-md bg-[#353046] border border-white/10 text-white text-xs focus:outline-none focus:border-[#7c5cfc]"
+              >
+                <option value="low">Low (48h SLA)</option>
+                <option value="medium">Medium (24h SLA)</option>
+                <option value="high">High (12h SLA)</option>
+                <option value="urgent">Urgent (4h SLA)</option>
+              </select>
+            </div>
+          </div>
 
           <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-white/10">
             <button
